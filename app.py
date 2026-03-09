@@ -124,9 +124,12 @@ def init_db():
     if not c.execute("SELECT 1 FROM users LIMIT 1").fetchone():
         c.execute("INSERT INTO users(username,password_hash,role,full_name) VALUES(?,?,?,?)",
                   ("admin",hash_pw("admin123"),"admin","Administrator"))
-    cats=[("Плодове","#E8502A","🍎"),("Зеленчуци","#7CB518","🥦"),("Млечни","#F5C842","🧀"),
-          ("Месо","#C0392B","🥩"),("Хляб","#D4A04A","🍞"),("Напитки","#2980B9","🥤"),
-          ("Консерви","#7F8C8D","🥫"),("Разни","#8E44AD","📦")]
+    cats = [("Плодове", "#E8502A", "🍎"), ("Зеленчуци", "#7CB518", "🥦"), ("Млечни", "#F5C842", "🧀"),
+            ("Месо", "#C0392B", "🥩"), ("Хляб", "#D4A04A", "🍞"), ("Напитки", "#2980B9", "🥤"),
+            ("Консерви", "#7F8C8D", "🥫"), ("Разни", "#8E44AD", "📦"),
+            ("Захарни изделия", "#E91E8C", "🍰"), ("Ядки", "#8B6914", "🥜"),
+            ("Солени изделия", "#FF6B35", "🧂"), ("Зърнени култури", "#C8A951", "🌾"),
+            ("Сандвичи", "#F5A623", "🥪")]
     for n,col,ic in cats:
         c.execute("INSERT OR IGNORE INTO categories(name,color,icon) VALUES(?,?,?)",(n,col,ic))
     db.commit(); db.close()
