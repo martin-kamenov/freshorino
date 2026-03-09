@@ -475,6 +475,20 @@ def api_expiring():
         ORDER BY date(expiry_date),name""")
     return jsonify([dict(r) for r in rows])
 
+@app.route("/api/change-password", methods=["POST"])
+@login_req
+def api_change_password():
+    d = request.get_json()
+    uid = session.get("uid")
+    user = qry("SELECT * FROM users WHERE id=?", (uid,), one=True)
+    if user["password_hash"] != hash_pw(d.get("old_password",'')):
+        return jsonify({"error": "Грешна текуща парола."}), 401
+    new_pw = (d.get("new_password") or "").strip()
+    if len(new_pw) < 4:
+        return jsonify({"error": "Паролата трябва да е поне 4 символа."}), 400
+    exe("UPDATE users SET password_hash=? WHERE id=?", (hash_pw(new_pw), uid))
+    return jsonify({"ok": True})
+
 @app.route("/api/users",methods=["POST"])
 @login_req
 def api_user_create():

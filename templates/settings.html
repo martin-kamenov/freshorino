@@ -30,10 +30,28 @@
     <div class="text-sm mb-2"><b>BGN курс:</b> 1 EUR = 1.95583 лв</div>
     <div class="text-sm mb-2"><b>База данни:</b> SQLite (store.db)</div>
     <div class="separator"></div>
+    <div class="separator"></div>
+    <div style="font-family:var(--font-display);font-size:15px;font-weight:700;margin-bottom:12px">🔑 Смяна на парола</div>
+    <div class="form-group"><label class="form-label">Текуща парола</label><input class="form-input" id="pwOld" type="password" placeholder="••••••••"></div>
+    <div class="form-group"><label class="form-label">Нова парола</label><input class="form-input" id="pwNew" type="password" placeholder="••••••••"></div>
+    <div class="form-group"><label class="form-label">Потвърди нова парола</label><input class="form-input" id="pwNew2" type="password" placeholder="••••••••"></div>
+    <button class="btn btn-primary" onclick="changePassword()">Смени паролата</button>
     <div class="text-xs text-muted">Freshorino POS v1.0 · Built with Flask + SQLite</div>
   </div>
 </div>
 <script>
+async function changePassword(){
+  const old=document.getElementById('pwOld').value;
+  const n1=document.getElementById('pwNew').value;
+  const n2=document.getElementById('pwNew2').value;
+  if(!old||!n1){toast('Попълни всички полета','warning');return}
+  if(n1!==n2){toast('Новите пароли не съвпадат','warning');return}
+  if(n1.length<4){toast('Паролата трябва да е поне 4 символа','warning');return}
+  const r=await api('POST','/api/change-password',{old_password:old,new_password:n1});
+  if(r.ok){toast('Паролата е сменена успешно! ✅','success');
+    ['pwOld','pwNew','pwNew2'].forEach(id=>document.getElementById(id).value='');}
+  else toast(r.error||'Грешка','error');
+}
 async function deleteUser(id){
   if(!confirm('Изтрий потребителя?')) return;
   const r=await api('DELETE','/api/users/'+id);
