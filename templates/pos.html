@@ -1,0 +1,446 @@
+{% extends "base.html" %}
+{% block title %}POS — Продажба{% endblock %}
+{% block page_title %}POS — Нова Продажба{% endblock %}
+
+{% block extra_head %}
+<style>
+.pos-wrap{display:grid;grid-template-columns:1fr 380px;gap:16px;height:calc(100vh - 110px)}
+.pos-left{display:flex;flex-direction:column;gap:12px;overflow:hidden}
+.pos-right{display:flex;flex-direction:column;gap:12px;overflow:hidden}
+.search-bar{display:flex;gap:8px;align-items:center}
+.search-input{flex:1;background:var(--panel2);border:1px solid var(--border);border-radius:10px;
+  padding:10px 14px;color:var(--text);font-family:var(--font-body);font-size:14px;
+  transition:border-color .2s}
+.search-input:focus{outline:none;border-color:var(--green);box-shadow:0 0 0 3px rgba(124,181,24,.12)}
+.autocomplete{position:relative}
+.autocomplete-list{
+  position:absolute;top:100%;left:0;right:0;z-index:500;
+  background:var(--panel2);border:1px solid var(--border);border-radius:10px;
+  margin-top:4px;max-height:240px;overflow-y:auto;box-shadow:var(--shadow);
+  display:none;
+}
+.autocomplete-list.open{display:block}
+.ac-item{padding:10px 14px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(124,181,24,.08)}
+.ac-item:last-child{border-bottom:none}
+.ac-item:hover,.ac-item.focused{background:var(--panel)}
+.ac-name{font-size:13.5px;font-weight:500}
+.ac-meta{font-size:11px;color:var(--text3)}
+.ac-price{font-size:13px;font-weight:700;color:var(--green2)}
+
+.cart-wrap{flex:1;overflow:hidden;display:flex;flex-direction:column}
+.cart-table-wrap{flex:1;overflow-y:auto}
+.cart-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;
+  height:200px;color:var(--text3);gap:10px;font-size:14px}
+.cart-empty svg{width:48px;height:48px;opacity:.3}
+
+.cart-item{display:flex;align-items:center;gap:10px;padding:10px 0;
+  border-bottom:1px solid rgba(124,181,24,.08)}
+.ci-name{flex:1;font-size:13px;font-weight:500;min-width:0}
+.ci-sub{font-size:11px;color:var(--text3)}
+.ci-qty{display:flex;align-items:center;gap:5px}
+.qty-btn{width:26px;height:26px;border-radius:6px;border:1px solid var(--border);
+  background:var(--panel2);color:var(--text);cursor:pointer;font-size:14px;
+  display:flex;align-items:center;justify-content:center;transition:all .15s}
+.qty-btn:hover{background:var(--green);color:#000;border-color:var(--green)}
+.ci-price{text-align:right;white-space:nowrap}
+.remove-btn{background:none;border:none;color:var(--text3);cursor:pointer;padding:4px;border-radius:5px;transition:color .15s}
+.remove-btn:hover{color:var(--red)}
+
+.totals-section{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:14px 16px}
+.total-row{display:flex;justify-content:space-between;padding:3px 0;font-size:13px}
+.total-row.grand{font-size:17px;font-weight:700;padding-top:8px;border-top:1px solid var(--border);margin-top:4px}
+
+.calc-section{background:var(--panel2);border:1px solid var(--border);border-radius:12px;padding:14px}
+.calc-section label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text3);display:block;margin-bottom:5px}
+.calc-input{width:100%;background:var(--panel);border:1px solid var(--border);border-radius:8px;
+  padding:8px 12px;color:var(--text);font-size:15px;font-weight:600;}
+.calc-input:focus{outline:none;border-color:var(--green)}
+.change-display{margin-top:8px;background:rgba(124,181,24,.1);border:1px solid rgba(124,181,24,.25);
+  border-radius:8px;padding:10px 12px;text-align:center}
+.change-eur{font-size:22px;font-weight:900;color:var(--green2)}
+.change-bgn{font-size:12px;color:var(--text3)}
+
+.scanner-fab{
+  position:fixed;bottom:80px;right:20px;
+  width:52px;height:52px;border-radius:50%;
+  background:var(--green);color:#000;border:none;cursor:pointer;
+  box-shadow:0 4px 16px rgba(124,181,24,.4);
+  display:flex;align-items:center;justify-content:center;
+  transition:transform .15s;z-index:50;
+}
+.scanner-fab:hover{transform:scale(1.08)}
+
+.quick-chips{display:flex;flex-wrap:wrap;gap:6px}
+.quick-chip{padding:6px 12px;border-radius:20px;background:var(--panel2);
+  border:1px solid var(--border);font-size:12px;font-weight:600;cursor:pointer;
+  color:var(--text2);transition:all .15s}
+.quick-chip:hover{background:var(--green);color:#000;border-color:var(--green)}
+
+@media(max-width:900px){
+  .pos-wrap{grid-template-columns:1fr;height:auto}
+  .pos-right{position:fixed;bottom:60px;left:0;right:0;
+    background:var(--bg2);border-top:1px solid var(--border);
+    padding:12px;z-index:80;max-height:45vh;overflow-y:auto;display:none}
+  .pos-right.visible{display:flex}
+  .cart-toggle{display:flex!important}
+}
+.cart-toggle{display:none;position:fixed;bottom:70px;right:16px;z-index:81}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="pos-wrap">
+
+  <!-- LEFT: Search + Cart -->
+  <div class="pos-left">
+    <!-- Search -->
+    <div class="card" style="padding:14px;position:relative;z-index:400;overflow:visible">
+      <div class="search-bar autocomplete">
+        <input class="search-input" id="searchInput" type="text" placeholder="🔍  Търси по ime, баркод или ID…" autocomplete="off">
+        <div class="autocomplete-list" id="acList"></div>
+        <div class="form-group mb-0" style="min-width:80px">
+          <input class="form-input" id="qtyInput" type="number" min="0.001" step="any" value="1" placeholder="К-во">
+        </div>
+        <button class="btn btn-primary" onclick="addFromSearch()">+ Добави</button>
+      </div>
+      <!-- Quick chips -->
+      <div class="quick-chips mt-3" id="quickChips">
+        <div class="text-xs text-muted" style="width:100%;padding-bottom:2px">Бързи артикули:</div>
+      </div>
+    </div>
+
+    <!-- Cart -->
+    <div class="card" style="flex:1;padding:14px;display:flex;flex-direction:column;overflow:hidden">
+      <div class="flex justify-between items-center mb-3">
+        <div style="font-family:var(--font-display);font-size:17px;font-weight:700">Сметка</div>
+        <div class="flex gap-2">
+          <button class="btn btn-sm btn-ghost" onclick="clearCart()">Изчисти</button>
+        </div>
+      </div>
+      <div class="cart-wrap">
+        <div class="cart-table-wrap" id="cartList">
+          <div class="cart-empty" id="cartEmpty">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 002 1.61h9.72a2 2 0 001.97-1.67L23 6H6"/></svg>
+            <span>Добавете артикули</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: Totals + Checkout -->
+  <div class="pos-right" id="posRight">
+    <!-- Discount -->
+    <div class="card" style="padding:14px">
+      <div class="text-xs text-muted font-bold mb-2" style="text-transform:uppercase;letter-spacing:.08em">Отстъпка</div>
+      <div class="flex gap-2 items-center">
+        <input class="form-input" id="discInput" type="number" min="0" max="100" step="0.5" value="0" style="width:80px" oninput="recalc()">
+        <span class="text-sm text-muted">%</span>
+        <div class="flex gap-1">
+          <button class="btn btn-sm btn-ghost" onclick="setDisc(5)">5%</button>
+          <button class="btn btn-sm btn-ghost" onclick="setDisc(10)">10%</button>
+          <button class="btn btn-sm btn-ghost" onclick="setDisc(0)">0%</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Totals -->
+    <div class="totals-section">
+      <div class="total-row"><span class="text-muted">Преди отстъпка</span><span id="preTotal">€0.00</span></div>
+      <div class="total-row"><span class="text-muted">Отстъпка</span><span id="discAmt" style="color:var(--red)">—</span></div>
+      <div class="total-row grand">
+        <span>ОБЩО</span>
+        <div class="price-dual" style="text-align:right">
+          <div class="price-eur" id="totalEur">€0.00</div>
+          <div class="price-bgn" id="totalBgn">0.00 лв</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Cash calculator -->
+    <div class="calc-section">
+      <label>Получено (€)</label>
+      <input class="calc-input" id="receivedInput" type="number" min="0" step="0.01" placeholder="0.00" oninput="calcChange()">
+      <div class="change-display" id="changeDisplay" style="display:none">
+        <div class="change-eur" id="changeEur"></div>
+        <div class="change-bgn" id="changeBgn"></div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px">Ресто</div>
+      </div>
+    </div>
+
+    <!-- Finish -->
+    <button class="btn btn-primary btn-lg w-full" style="font-size:16px" onclick="finishSale()">
+      ✅  Приключи Продажбата
+    </button>
+
+    <!-- Barcode scanner (camera) -->
+    <div id="scannerSection" style="display:none">
+      <div class="separator"></div>
+      <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text3);margin-bottom:8px">📷 Сканиране</div>
+      <video id="scanVideo" style="width:100%;border-radius:8px;background:#000" playsinline></video>
+      <canvas id="scanCanvas" style="display:none"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- Mobile cart toggle -->
+<button class="cart-toggle btn btn-primary" onclick="toggleCartPanel()">🛒 Сметка (<span id="cartCount">0</span>)</button>
+
+<!-- Scanner FAB (mobile) -->
+<button class="scanner-fab" onclick="toggleScanner()" id="scannerFab">
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7V5a2 2 0 012-2h2M17 3h2a2 2 0 012 2v2M21 17v2a2 2 0 01-2 2h-2M7 21H5a2 2 0 01-2-2v-2"/><line x1="7" y1="12" x2="17" y2="12"/></svg>
+</button>
+
+<script>
+// ── State ──────────────────────────────────────────────────
+let cart=[], searchTimer=null, searchResults=[], focusIdx=-1;
+const categories={{ categories|tojson }};
+
+// ── DOM refs ───────────────────────────────────────────────
+const searchInput=document.getElementById('searchInput');
+const qtyInput   =document.getElementById('qtyInput');
+const acList     =document.getElementById('acList');
+const cartList   =document.getElementById('cartList');
+const cartEmpty  =document.getElementById('cartEmpty');
+
+// ── Init quick chips ──────────────────────────────────────
+async function loadQuickChips(){
+  const wrap=document.getElementById('quickChips');
+  // load products with very low barcode or name match for bags
+  const res=await fetch('/api/products?q=торбичка&limit=5');
+  const items=await res.json();
+  items.forEach(p=>{
+    const btn=document.createElement('button');
+    btn.className='quick-chip';
+    btn.textContent=p.name+' '+fmtEur(p.price);
+    btn.onclick=()=>addToCart(p,1);
+    wrap.appendChild(btn);
+  });
+}
+loadQuickChips();
+
+// ── Search / Autocomplete ─────────────────────────────────
+searchInput.addEventListener('input',()=>{
+  clearTimeout(searchTimer);
+  searchTimer=setTimeout(doSearch,180);
+});
+searchInput.addEventListener('keydown',e=>{
+  if(e.key==='ArrowDown'){e.preventDefault();moveFocus(1)}
+  else if(e.key==='ArrowUp'){e.preventDefault();moveFocus(-1)}
+  else if(e.key==='Enter'){
+    if(focusIdx>=0&&focusIdx<searchResults.length){
+      selectProduct(searchResults[focusIdx]);
+    } else { addFromSearch() }
+  }
+  else if(e.key==='Escape'){closeAC()}
+});
+
+async function doSearch(){
+  const q=searchInput.value.trim();
+  if(!q){closeAC();return}
+  const res=await fetch('/api/products?q='+encodeURIComponent(q)+'&limit=10');
+  searchResults=await res.json();
+  focusIdx=-1;
+  renderAC();
+}
+
+function renderAC(){
+  if(!searchResults.length){acList.classList.remove('open');return}
+  acList.innerHTML=searchResults.map((p,i)=>`
+    <div class="ac-item" data-idx="${i}" onclick="selectProduct(searchResults[${i}])">
+      <div>
+        <div class="ac-name">${p.name}${p.barcode?` <span class="text-xs text-muted">[${p.barcode}]</span>`:''}</div>
+        <div class="ac-meta">${p.quantity} ${p.unit_type} · ${p.category_name||'—'}</div>
+      </div>
+      <div class="ac-price">€${p.price.toFixed(2)} (${(p.price*EUR_RATE).toFixed(2)} лв)</div>
+    </div>`).join('');
+  acList.classList.add('open');
+}
+
+function moveFocus(dir){
+  const items=acList.querySelectorAll('.ac-item');
+  if(!items.length) return;
+  items[Math.max(0,focusIdx)]?.classList.remove('focused');
+  focusIdx=Math.max(0,Math.min(items.length-1,focusIdx+dir));
+  items[focusIdx]?.classList.add('focused');
+  items[focusIdx]?.scrollIntoView({block:'nearest'});
+}
+
+function selectProduct(p){
+  searchInput.value=p.name;
+  closeAC();
+  qtyInput.focus();
+  qtyInput.select();
+  window._selectedProduct=p;
+}
+
+function closeAC(){acList.classList.remove('open');searchResults=[];focusIdx=-1}
+document.addEventListener('click',e=>{if(!e.target.closest('.autocomplete'))closeAC()});
+
+async function addFromSearch(){
+  let p=window._selectedProduct;
+  if(!p){
+    const q=searchInput.value.trim();
+    if(!q) return;
+    const res=await fetch('/api/products?q='+encodeURIComponent(q)+'&limit=5');
+    const rs=await res.json();
+    if(!rs.length){toast('Продуктът не е намерен.','warning');return}
+    p=rs[0];
+  }
+  const qty=parseFloat(qtyInput.value)||1;
+  addToCart(p,qty);
+  searchInput.value=''; qtyInput.value='1'; window._selectedProduct=null;
+  searchInput.focus();
+}
+
+// ── Cart ──────────────────────────────────────────────────
+function addToCart(product, qty){
+  if(qty<=0){toast('Количеството трябва да е > 0','warning');return}
+  if(product.unit_type==='piece'&&qty!==Math.round(qty)){
+    toast('Бройките трябва да са цели числа','warning');return
+  }
+  const totalNeeded=qty+(cart.find(i=>i.product_id===product.id)?.quantity||0);
+  if(totalNeeded>product.quantity){
+    toast(`Недостатъчна наличност (${product.quantity} ${product.unit_type})`,'warning');return
+  }
+  const existing=cart.find(i=>i.product_id===product.id);
+  if(existing){ existing.quantity+=qty; existing.line_total=existing.quantity*existing.unit_price; }
+  else{
+    cart.push({product_id:product.id,name:product.name,quantity:qty,unit_type:product.unit_type,
+               unit_price:product.price,cost_price:product.purchase_price,
+               line_total:qty*product.price,max_qty:product.quantity});
+  }
+  renderCart(); recalc();
+}
+
+function renderCart(){
+  document.getElementById('cartCount').textContent=cart.length;
+  if(!cart.length){
+    cartList.innerHTML='';
+    cartEmpty.style.display='flex';
+    return;
+  }
+  cartEmpty.style.display='none';
+  cartList.innerHTML=cart.map((it,i)=>`
+    <div class="cart-item">
+      <div style="flex:1;min-width:0">
+        <div class="ci-name">${it.name}</div>
+        <div class="ci-sub">€${it.unit_price.toFixed(4)} (${(it.unit_price*EUR_RATE).toFixed(2)} лв) / ${it.unit_type}</div>
+      </div>
+      <div class="ci-qty">
+        <button class="qty-btn" onclick="changeQty(${i},-1)">−</button>
+        <span style="min-width:36px;text-align:center;font-size:13px;font-weight:600">${it.unit_type==='kg'?it.quantity.toFixed(3):it.quantity}</span>
+        <button class="qty-btn" onclick="changeQty(${i},1)">+</button>
+      </div>
+      <div class="ci-price">
+        <div class="price-eur">${fmtEur(it.line_total)}</div>
+        <div class="price-bgn">${fmtBgn(it.line_total)}</div>
+      </div>
+      <button class="remove-btn" onclick="removeItem(${i})">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>`).join('');
+}
+
+function changeQty(idx, delta){
+  const it=cart[idx];
+  const newQty=it.quantity+delta*(it.unit_type==='kg'?.1:1);
+  if(newQty<=0){removeItem(idx);return}
+  if(newQty>it.max_qty){toast('Недостатъчна наличност','warning');return}
+  it.quantity=Math.round(newQty*1000)/1000;
+  it.line_total=it.quantity*it.unit_price;
+  renderCart(); recalc();
+}
+
+function removeItem(idx){cart.splice(idx,1);renderCart();recalc()}
+function clearCart(){cart=[];renderCart();recalc();searchInput.focus()}
+
+// ── Totals ────────────────────────────────────────────────
+function recalc(){
+  const pre=cart.reduce((s,i)=>s+i.line_total,0);
+  const disc=Math.min(100,Math.max(0,parseFloat(document.getElementById('discInput').value)||0));
+  const discAmt=pre*(disc/100);
+  const total=pre-discAmt;
+  document.getElementById('preTotal').textContent=fmtEur(pre);
+  document.getElementById('discAmt').textContent=discAmt>0?`-${fmtEur(discAmt)}`:'—';
+  document.getElementById('totalEur').textContent=fmtEur(total);
+  document.getElementById('totalBgn').textContent=fmtBgn(total);
+  calcChange();
+}
+
+function setDisc(v){document.getElementById('discInput').value=v;recalc()}
+
+function calcChange(){
+  const total=parseFloat(document.getElementById('totalEur').textContent.replace('€',''))||0;
+  const recv=parseFloat(document.getElementById('receivedInput').value)||0;
+  const disp=document.getElementById('changeDisplay');
+  if(recv>0){
+    const ch=Math.max(0,recv-total);
+    document.getElementById('changeEur').textContent=fmtEur(ch);
+    document.getElementById('changeBgn').textContent=fmtBgn(ch);
+    disp.style.display='';
+    disp.style.background=ch>=0?'rgba(124,181,24,.1)':'rgba(232,80,42,.1)';
+  } else { disp.style.display='none' }
+}
+
+// ── Finish sale ───────────────────────────────────────────
+async function finishSale(){
+  if(!cart.length){toast('Добавете артикули','warning');return}
+  const disc=parseFloat(document.getElementById('discInput').value)||0;
+  const recv=parseFloat(document.getElementById('receivedInput').value)||0;
+  const btn=document.querySelector('.btn-primary.btn-lg');
+  btn.textContent='⏳ Записване…'; btn.disabled=true;
+  const r=await api('POST','/api/sales',{items:cart,discount_percent:disc,received_eur:recv});
+  btn.textContent='✅  Приключи Продажбата'; btn.disabled=false;
+  if(r.ok){
+    toast(`Продажба #${r.sale_id} записана! Ресто: ${fmtEur(r.change)} / ${fmtBgn(r.change)}`, 'success', 5000);
+    clearCart();
+    document.getElementById('receivedInput').value='';
+    document.getElementById('discInput').value='0';
+  } else { toast(r.error||'Грешка при запис','error') }
+}
+
+// ── Scanner (WebRTC + canvas) ─────────────────────────────
+let scanning=false, scanStream=null, scanInterval=null;
+
+async function toggleScanner(){
+  if(scanning){ stopScanner(); return }
+  const sec=document.getElementById('scannerSection');
+  sec.style.display=''; scanning=true;
+  document.getElementById('scannerFab').style.background='var(--red)';
+  try{
+    scanStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+    document.getElementById('scanVideo').srcObject=scanStream;
+    await document.getElementById('scanVideo').play();
+    // Use BarcodeDetector if available
+    if('BarcodeDetector' in window){
+      const bd=new BarcodeDetector({formats:['ean_13','ean_8','code_128','qr_code']});
+      scanInterval=setInterval(async()=>{
+        try{
+          const barcodes=await bd.detect(document.getElementById('scanVideo'));
+          if(barcodes.length){
+            const code=barcodes[0].rawValue;
+            stopScanner();
+            searchInput.value=code;
+            doSearch().then(()=>{if(searchResults.length)selectProduct(searchResults[0])});
+            toast('Баркод: '+code,'success');
+          }
+        }catch(e){}
+      },200);
+    } else { toast('BarcodeDetector не се поддържа от браузъра.','warning') }
+  } catch(e){ toast('Камерата не е достъпна.','error'); stopScanner() }
+}
+
+function stopScanner(){
+  scanning=false;
+  clearInterval(scanInterval);
+  if(scanStream) scanStream.getTracks().forEach(t=>t.stop());
+  document.getElementById('scannerSection').style.display='none';
+  document.getElementById('scannerFab').style.background='var(--green)';
+}
+
+function toggleCartPanel(){
+  document.getElementById('posRight').classList.toggle('visible');
+}
+</script>
+{% endblock %}

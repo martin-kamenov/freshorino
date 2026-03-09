@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Продажби — Freshorino{% endblock %}
+{% block page_title %}История на Продажбите{% endblock %}
+{% block page_subtitle %}{{ sales|length }} записа{% endblock %}
+
+{% block content %}
+<div class="fade-up space-y-4">
+  <!-- Summary -->
+  <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+    <div class="stat-card p-4">
+      <div class="text-xs text-green-600 mb-1">Общ Оборот</div>
+      <div class="font-display text-xl text-green-200">€{{ "%.2f"|format(total_revenue) }}</div>
+      <div class="text-xs text-green-700">{{ "%.2f"|format(total_revenue * eur_rate) }} лв</div>
+    </div>
+    <div class="stat-card p-4">
+      <div class="text-xs text-green-600 mb-1">Обща Печалба</div>
+      <div class="font-display text-xl text-green-200">€{{ "%.2f"|format(total_profit) }}</div>
+      <div class="text-xs text-green-700">{{ "%.2f"|format(total_profit * eur_rate) }} лв</div>
+    </div>
+    <div class="stat-card p-4 col-span-2 md:col-span-1">
+      <div class="text-xs text-green-600 mb-1">Среден Марж</div>
+      <div class="font-display text-xl text-green-200">
+        {{ "%.1f"|format(total_profit/total_revenue*100) if total_revenue > 0 else "0.0" }}%
+      </div>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <div class="glass-card p-4">
+    <form method="GET" class="flex flex-wrap gap-3 items-end">
+      <div><label class="text-xs text-green-600 block mb-1">От дата</label>
+        <input type="date" name="from" value="{{ date_from }}" class="input-dark"></div>
+      <div><label class="text-xs text-green-600 block mb-1">До дата</label>
+        <input type="date" name="to" value="{{ date_to }}" class="input-dark"></div>
+      <button type="submit" class="btn-primary">Зареди</button>
+      {% if date_from or date_to %}<a href="/sales" class="btn-ghost">✕</a>{% endif %}
+    </form>
+  </div>
+
+  <!-- Table -->
+  <div class="glass-card overflow-hidden">
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead><tr class="border-b border-green-900/40 text-xs text-green-600 uppercase tracking-wider">
+          <th class="px-4 py-3 text-left">ID</th>
+          <th class="px-4 py-3 text-left">Дата и Час</th>
+          <th class="px-4 py-3 text-right">Оборот</th>
+          <th class="px-4 py-3 text-right hidden sm:table-cell">Отстъпка</th>
+          <th class="px-4 py-3 text-right hidden md:table-cell">Печалба</th>
+          <th class="px-4 py-3 text-left hidden lg:table-cell">Касиер</th>
+          <th class="px-4 py-3"></th>
+        </tr></thead>
+        <tbody>
+          {% for s in sales %}
+          <tr class="table-row">
+            <td class="px-4 py-3 text-green-700 font-mono">#{{ s.id }}</td>
+            <td class="px-4 py-3 text-green-400 font-mono text-xs">{{ s.date }}</td>
+            <td class="px-4 py-3 text-right">
+              <div class="font-semibold text-green-200">€{{ "%.2f"|format(s.total) }}</div>
+              <div class="text-xs text-green-700">{{ "%.2f"|format(s.total * eur_rate) }} лв</div>
+            </td>
+            <td class="px-4 py-3 text-right hidden sm:table-cell">
+              {% if s.discount_percent > 0 %}
+              <span class="badge badge-gold">-{{ "%.1f"|format(s.discount_percent) }}%</span>
+              {% else %}<span class="text-green-800">—</span>{% endif %}
+            </td>
+            <td class="px-4 py-3 text-right hidden md:table-cell">
+              <span class="text-green-400">€{{ "%.2f"|format(s.profit) }}</span>
+            </td>
+            <td class="px-4 py-3 text-xs text-green-600 hidden lg:table-cell">{{ s.cashier or '—' }}</td>
+            <td class="px-4 py-3"><a href="/sales/{{ s.id }}" class="btn-ghost py-1 px-3 text-xs">Детайли →</a></td>
+          </tr>
+          {% else %}
+          <tr><td colspan="7" class="px-4 py-10 text-center text-green-700">Няма намерени продажби</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

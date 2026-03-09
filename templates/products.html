@@ -1,0 +1,303 @@
+{% extends "base.html" %}
+{% block title %}Продукти{% endblock %}
+{% block page_title %}Продукти{% endblock %}
+{% block topbar_actions %}
+<button class="btn btn-primary" onclick="openModal()">+ Нов продукт</button>
+{% endblock %}
+
+{% block extra_head %}
+<style>
+.cat-filter{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+.cat-pill{padding:5px 12px;border-radius:20px;font-size:12px;font-weight:600;cursor:pointer;
+  border:1px solid var(--border);color:var(--text2);background:transparent;transition:all .15s}
+.cat-pill.active,.cat-pill:hover{color:#000;border-color:transparent}
+
+.sort-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px;
+  background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:10px 14px}
+.sort-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text3);white-space:nowrap}
+.sort-select{background:var(--panel);border:1px solid var(--border);border-radius:7px;padding:5px 10px;
+  color:var(--text);font-size:13px;cursor:pointer}
+.sort-dir-btn{padding:5px 10px;border-radius:7px;border:1px solid var(--border);background:var(--panel);
+  color:var(--text2);cursor:pointer;font-size:13px;transition:all .15s;white-space:nowrap}
+.sort-dir-btn.active{background:var(--green);color:#000;border-color:var(--green)}
+
+.product-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+.product-card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:14px;
+  cursor:pointer;transition:all .18s;position:relative}
+.product-card:hover{border-color:var(--green-dim);transform:translateY(-2px);box-shadow:0 4px 16px rgba(0,0,0,.3)}
+.pc-badge{position:absolute;top:10px;right:10px}
+.pc-name{font-size:14px;font-weight:600;margin-bottom:3px;line-height:1.3}
+.pc-barcode{font-size:10px;color:var(--text3);margin-bottom:8px;font-family:monospace}
+.pc-price{font-size:18px;font-weight:800;color:var(--green2)}
+.pc-price-bgn{font-size:11px;color:var(--text3)}
+.pc-stock{margin-top:8px;font-size:12px;display:flex;justify-content:space-between}
+.pc-actions{margin-top:10px;display:flex;gap:6px;opacity:0;transition:opacity .15s}
+.product-card:hover .pc-actions{opacity:1}
+.prod-count{font-size:12px;color:var(--text3);margin-left:auto}
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Search + Category filter -->
+<div class="flex gap-3 mb-3 items-center flex-wrap">
+  <input class="form-input" id="searchQ" style="max-width:260px" placeholder="🔍 Търси продукт…" oninput="debounceLoad()">
+  <div class="cat-filter" id="catFilter">
+    <button class="cat-pill active" style="background:var(--green);color:#000;border-color:var(--green)" onclick="setCategory(null,this)">Всички</button>
+  </div>
+  <span class="prod-count" id="prodCount"></span>
+</div>
+
+<!-- Sort bar -->
+<div class="sort-bar">
+  <span class="sort-label">Сортирай:</span>
+  <select class="sort-select" id="sortBy" onchange="load()">
+    <option value="name">Наименование</option>
+    <option value="price">Продажна цена</option>
+    <option value="quantity">Наличност</option>
+    <option value="expiry_date">Срок на годност</option>
+    <option value="category">Категория</option>
+    {% if user.role == 'admin' %}
+    <option value="margin">Марж %</option>
+    <option value="markup">Надценка %</option>
+    {% endif %}
+  </select>
+  <button class="sort-dir-btn active" id="btnAsc" onclick="setDir('asc')">↑ Възходящ</button>
+  <button class="sort-dir-btn" id="btnDesc" onclick="setDir('desc')">↓ Низходящ</button>
+</div>
+
+<div class="product-grid" id="productGrid"></div>
+<div class="text-muted text-sm text-center mt-4" id="noResults" style="display:none">Няма намерени продукти.</div>
+
+<!-- Product Modal -->
+<div class="overlay hidden" id="productModal">
+  <div class="modal">
+    <div class="modal-title" id="modalTitle">Нов продукт</div>
+    <input type="hidden" id="editId">
+    <div class="grid g2">
+      <div class="form-group" style="grid-column:1/-1">
+        <label class="form-label">Наименование *</label>
+        <input class="form-input" id="fName" placeholder="Домати, Ябълки…">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Баркод</label>
+        <input class="form-input" id="fBarcode" placeholder="EAN-13…">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Категория</label>
+        <select class="form-select" id="fCategory">
+          <option value="">— Избери —</option>
+          {% for c in categories %}
+          <option value="{{ c.id }}">{{ c.icon }} {{ c.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Продажна цена (€)</label>
+        <input class="form-input" id="fPrice" type="number" min="0" step="0.001" placeholder="0.00">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Покупна цена (€)</label>
+        <input class="form-input" id="fPurchase" type="number" min="0" step="0.001" placeholder="0.00">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Наличност</label>
+        <input class="form-input" id="fQty" type="number" min="0" step="any" placeholder="0">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Мерна единица</label>
+        <select class="form-select" id="fUnit">
+          <option value="piece">Брой (бр.)</option>
+          <option value="kg">Килограми (кг)</option>
+        </select>
+      </div>
+      <div class="form-group" style="grid-column:1/-1">
+        <label class="form-label">Срок на годност</label>
+        <input class="form-input" id="fExpiry" type="date">
+      </div>
+    </div>
+    <div id="marginPreview" class="mt-2 text-sm text-muted"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal()">Отказ</button>
+      <button class="btn btn-primary" onclick="saveProduct()">Запази</button>
+    </div>
+  </div>
+</div>
+
+<!-- Restock modal -->
+<div class="overlay hidden" id="restockModal">
+  <div class="modal" style="max-width:360px">
+    <div class="modal-title">Зареждане на наличност</div>
+    <div id="restockProductName" class="text-muted mb-3"></div>
+    <input type="hidden" id="restockId">
+    <div class="form-group">
+      <label class="form-label">Добавяне на количество</label>
+      <input class="form-input" id="restockQty" type="number" min="0.001" step="any" placeholder="0">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeRestock()">Отказ</button>
+      <button class="btn btn-primary" onclick="saveRestock()">Добави</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const CATS={{ categories|tojson }};
+const IS_ADMIN={{ 'true' if user.role=='admin' else 'false' }};
+let activeCat=null, sortDir='asc';
+
+// Build category pills
+const cf=document.getElementById('catFilter');
+CATS.forEach(c=>{
+  const btn=document.createElement('button');
+  btn.className='cat-pill'; btn.textContent=`${c.icon} ${c.name}`;
+  btn.dataset.id=c.id; btn.dataset.color=c.color;
+  btn.onclick=()=>setCategory(c.id,btn);
+  cf.appendChild(btn);
+});
+
+function setCategory(id,el){
+  activeCat=id;
+  document.querySelectorAll('.cat-pill').forEach(p=>{
+    p.classList.remove('active');p.style.background='';p.style.borderColor='';p.style.color='';
+  });
+  el.classList.add('active');
+  const color=el.dataset.color||'var(--green)';
+  el.style.background=color; el.style.borderColor=color; el.style.color='#000';
+  load();
+}
+
+function setDir(dir){
+  sortDir=dir;
+  document.getElementById('btnAsc').classList.toggle('active', dir==='asc');
+  document.getElementById('btnDesc').classList.toggle('active', dir==='desc');
+  load();
+}
+
+let debTimer;
+function debounceLoad(){clearTimeout(debTimer);debTimer=setTimeout(load,200)}
+
+async function load(){
+  const q=document.getElementById('searchQ').value.trim();
+  const sort=document.getElementById('sortBy').value;
+  const url='/api/products?limit=2000'
+    +(q?'&q='+encodeURIComponent(q):'')
+    +(activeCat?'&category='+activeCat:'')
+    +'&sort='+sort+'&dir='+sortDir;
+  const prods=await (await fetch(url)).json();
+  const grid=document.getElementById('productGrid');
+  const noR=document.getElementById('noResults');
+  document.getElementById('prodCount').textContent=prods.length+' продукта';
+  if(!prods.length){grid.innerHTML='';noR.style.display='';return}
+  noR.style.display='none';
+  grid.innerHTML=prods.map(p=>{
+    const stockClass=p.quantity<=0?'stock-out':p.quantity<=3?'stock-low':'stock-ok';
+    const stockLabel=p.quantity<=0?'Изчерпан':p.quantity<=3?'Малко':'В наличност';
+    const qtyStr=p.unit_type==='kg'?p.quantity.toFixed(3):p.quantity;
+    const adminInfo=IS_ADMIN?`<span class="text-xs" style="color:var(--text3)"> · М:${p.margin_pct}%</span>`:'';
+    return `<div class="product-card" onclick="editProduct(${p.id})">
+      <div class="pc-badge"><span class="badge ${stockClass==='stock-out'?'badge-red':stockClass==='stock-low'?'badge-amber':'badge-green'}">${stockLabel}</span></div>
+      ${p.category_name?`<div class="text-xs mb-1" style="color:${p.category_color||'var(--text3)'}">${p.category_name}</div>`:''}
+      <div class="pc-name">${p.name}</div>
+      ${p.barcode?`<div class="pc-barcode">${p.barcode}</div>`:'<div style="height:14px"></div>'}
+      <div class="pc-price">€${p.price.toFixed(2)}</div>
+      <div class="pc-price-bgn">(${(p.price*EUR_RATE).toFixed(2)} лв)${adminInfo}</div>
+      <div class="pc-stock">
+        <span>Налично: <b>${qtyStr} ${p.unit_type}</b></span>
+        ${p.expiry_date?`<span class="text-amber text-xs">${p.expiry_date}</span>`:''}
+      </div>
+      <div class="pc-actions" onclick="event.stopPropagation()">
+        <button class="btn btn-sm btn-ghost" onclick="openRestock(${p.id},'${p.name.replace(/'/g,'\\\'')}')" title="Зареди">⬆ Зареди</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteProduct(${p.id})" title="Изтрий">🗑</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function calcMarginPreview(){
+  const sell=parseFloat(document.getElementById('fPrice').value)||0;
+  const buy=parseFloat(document.getElementById('fPurchase').value)||0;
+  const el=document.getElementById('marginPreview');
+  if(sell>0&&buy>0){
+    const margin=((sell-buy)/sell*100).toFixed(1);
+    const markup=((sell-buy)/buy*100).toFixed(1);
+    el.innerHTML=`Продажна: <b>€${sell.toFixed(2)} (${(sell*EUR_RATE).toFixed(2)} лв)</b> · Марж: <b style="color:var(--green2)">${margin}%</b> · Надценка: <b style="color:var(--amber)">${markup}%</b>`;
+  } else el.textContent='';
+}
+document.getElementById('fPrice').addEventListener('input',calcMarginPreview);
+document.getElementById('fPurchase').addEventListener('input',calcMarginPreview);
+
+function openModal(){ document.getElementById('productModal').classList.remove('hidden') }
+function closeModal(){ document.getElementById('productModal').classList.add('hidden'); clearForm() }
+
+function clearForm(){
+  ['fName','fBarcode','fPrice','fPurchase','fQty','fExpiry'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('fUnit').value='piece';
+  document.getElementById('fCategory').value='';
+  document.getElementById('editId').value='';
+  document.getElementById('modalTitle').textContent='Нов продукт';
+  document.getElementById('marginPreview').textContent='';
+}
+
+async function editProduct(id){
+  const p=await (await fetch('/api/products/'+id)).json();
+  document.getElementById('editId').value=p.id;
+  document.getElementById('fName').value=p.name;
+  document.getElementById('fBarcode').value=p.barcode||'';
+  document.getElementById('fCategory').value=p.category_id||'';
+  document.getElementById('fPrice').value=p.price;
+  document.getElementById('fPurchase').value=p.purchase_price;
+  document.getElementById('fQty').value=p.quantity;
+  document.getElementById('fUnit').value=p.unit_type;
+  document.getElementById('fExpiry').value=p.expiry_date||'';
+  document.getElementById('modalTitle').textContent='Редактиране: '+p.name;
+  calcMarginPreview();
+  openModal();
+}
+
+async function saveProduct(){
+  const id=document.getElementById('editId').value;
+  const data={
+    name:document.getElementById('fName').value,
+    barcode:document.getElementById('fBarcode').value||null,
+    category_id:document.getElementById('fCategory').value||null,
+    price:parseFloat(document.getElementById('fPrice').value)||0,
+    purchase_price:parseFloat(document.getElementById('fPurchase').value)||0,
+    quantity:parseFloat(document.getElementById('fQty').value)||0,
+    unit_type:document.getElementById('fUnit').value,
+    expiry_date:document.getElementById('fExpiry').value||null,
+  };
+  const r=await api(id?'PUT':'POST','/api/products'+(id?'/'+id:''),data);
+  if(r.ok||r.id){toast(id?'Продуктът е обновен.':'Продуктът е добавен.','success');closeModal();load()}
+  else toast(r.error||'Грешка','error');
+}
+
+async function deleteProduct(id){
+  if(!confirm('Сигурен ли си?')) return;
+  const r=await api('DELETE','/api/products/'+id);
+  if(r.ok){toast('Изтрит.','success');load()} else toast(r.error,'error');
+}
+
+function openRestock(id,name){
+  document.getElementById('restockId').value=id;
+  document.getElementById('restockProductName').textContent=name;
+  document.getElementById('restockQty').value='';
+  document.getElementById('restockModal').classList.remove('hidden');
+  document.getElementById('restockQty').focus();
+}
+function closeRestock(){document.getElementById('restockModal').classList.add('hidden')}
+
+async function saveRestock(){
+  const id=document.getElementById('restockId').value;
+  const qty=parseFloat(document.getElementById('restockQty').value)||0;
+  if(qty<=0){toast('qty>0','warning');return}
+  const r=await api('POST','/api/products/'+id+'/restock',{quantity:qty});
+  if(r.ok){toast('Заредено! Ново количество: '+r.new_quantity,'success');closeRestock();load()}
+  else toast(r.error,'error');
+}
+
+document.getElementById('productModal').addEventListener('click',e=>{if(e.target===e.currentTarget)closeModal()});
+document.getElementById('restockModal').addEventListener('click',e=>{if(e.target===e.currentTarget)closeRestock()});
+
+load();
+</script>
+{% endblock %}

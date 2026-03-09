@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}Брак{% endblock %}
+{% block page_title %}Управление на Брак{% endblock %}
+{% block topbar_actions %}
+<button class="btn btn-primary" onclick="openWasteModal()">+ Нов брак</button>
+{% endblock %}
+
+{% block content %}
+<div class="table-wrap">
+  <table>
+    <thead><tr>
+      <th>Дата</th><th>Продукт</th><th class="td-right">Количество</th><th>Причина</th>
+    </tr></thead>
+    <tbody id="wasteBody">
+      <tr><td colspan="4" class="td-center text-muted" style="padding:24px">Зарежда се…</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="overlay hidden" id="wasteModal">
+  <div class="modal" style="max-width:400px">
+    <div class="modal-title">Запиши Брак</div>
+    <div class="form-group">
+      <label class="form-label">Продукт *</label>
+      <input class="form-input" id="wSearch" placeholder="Търси продукт…" autocomplete="off" oninput="wSearchDebounce()">
+      <div id="wAcList" style="position:relative"></div>
+      <input type="hidden" id="wProdId">
+      <div id="wProdName" class="text-sm text-green mt-1"></div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Количество</label>
+      <input class="form-input" id="wQty" type="number" min="0.001" step="any" placeholder="0">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Причина</label>
+      <input class="form-input" id="wReason" placeholder="Развалено, изтекъл срок…">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeWasteModal()">Отказ</button>
+      <button class="btn btn-danger" onclick="saveWaste()">Запиши Брак</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let wTimer, wResults=[];
+function wSearchDebounce(){clearTimeout(wTimer);wTimer=setTimeout(wDoSearch,200)}
+async function wDoSearch(){
+  const q=document.getElementById('wSearch').value.trim();
+  if(!q){document.getElementById('wAcList').innerHTML='';return}
+  wResults=await (await fetch('/api/products?q='+encodeURIComponent(q)+'&limit=8')).json();
+  const el=document.getElementById('wAcList');
+  el.innerHTML=`<div style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;margin-top:4px;overflow:hidden">
+    ${wResults.map((p,i)=>`<div style="padding:8px 12px;cursor:pointer;border-bottom:1px solid rgba(124,181,24,.08);font-size:13px" onmousedown="wSelect(${i})">${p.name} — ${p.quantity} ${p.unit_type}</div>`).join('')}
+  </div>`;
+}
+function wSelect(i){
+  const p=wResults[i];
+  document.getElementById('wProdId').value=p.id;
+  document.getElementById('wProdName').textContent='✅ '+p.name+' ('+p.quantity+' '+p.unit_type+')';
+  document.getElementById('wSearch').value=p.name;
+  document.getElementById('wAcList').innerHTML='';
+}
+function openWasteModal(){
+  document.getElementById('wasteModal').classList.remove('hidden');
+  document.getElementById('wSearch').focus();
+}
+function closeWasteModal(){document.getElementById('wasteModal').classList.add('hidden')}
+async function saveWaste(){
+  const pid=document.getElementById('wProdId').value;
+  const qty=parseFloat(document.getElementById('wQty').value)||0;
+  if(!pid){toast('Изберете продукт','warning');return}
+  if(qty<=0){toast('qty>0','warning');return}
+  const r=await api('POST','/api/waste',{product_id:pid,quantity:qty,reason:document.getElementById('wReason').value});
+  if(r.ok){toast('Бракът е записан.','success');closeWasteModal();loadWaste()}
+  else toast(r.error||'Грешка','error');
+}
+async function loadWaste(){
+  const rows=await (await fetch('/api/waste')).json();
+  document.getElementById('wasteBody').innerHTML=rows.length?rows.map(r=>`
+    <tr><td>${r.date.slice(0,16)}</td><td>${r.product_name||'—'}</td>
+    <td class="td-right">${r.quantity} ${r.unit_type}</td>
+    <td class="text-muted">${r.reason||'—'}</td></tr>`).join(''):
+    '<tr><td colspan="4" class="td-center text-muted" style="padding:24px">Няма записи.</td></tr>';
+}
+document.getElementById('wasteModal').addEventListener('click',e=>{if(e.target===e.currentTarget)closeWasteModal()});
+loadWaste();
+</script>
+{% endblock %}

@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}Инвентар{% endblock %}
+{% block page_title %}Инвентарен Отчет{% endblock %}
+
+{% block content %}
+<div class="grid g3 mb-4" id="invStats">
+  <div class="stat-card"><div class="stat-card__label">Стойност по продажни цени</div><div class="stat-card__value" id="iSellVal">—</div><div class="stat-card__icon">💰</div></div>
+  <div class="stat-card"><div class="stat-card__label">Стойност по покупни цени</div><div class="stat-card__value" id="iCostVal">—</div><div class="stat-card__icon">🧾</div></div>
+  <div class="stat-card"><div class="stat-card__label">Потенциална печалба</div><div class="stat-card__value" id="iProfit">—</div><div class="stat-card__icon">📈</div></div>
+</div>
+
+<div class="card" style="padding:14px;margin-bottom:14px">
+  <div class="flex gap-3 items-center flex-wrap">
+    <input class="form-input" id="invSearch" style="max-width:240px" placeholder="🔍 Търси…" oninput="debInv()">
+    <label class="flex items-center gap-2 text-sm" style="cursor:pointer">
+      <input type="checkbox" id="lowStock" onchange="loadInv()" style="accent-color:var(--green)"> Само малко / изчерпани
+    </label>
+    <label class="flex items-center gap-2 text-sm" style="cursor:pointer">
+      <input type="checkbox" id="expiringOnly" onchange="loadInv()" style="accent-color:var(--amber)"> Изтичащ срок (7 дни)
+    </label>
+  </div>
+</div>
+
+<div class="table-wrap">
+  <table>
+    <thead><tr>
+      <th>ID</th><th>Продукт</th><th class="hide-mobile">Категория</th>
+      <th class="td-right">Налично</th>
+      <th class="td-right hide-mobile">Покупна €</th>
+      <th class="td-right">Продажна €</th>
+      <th class="td-right hide-mobile">Стойност (П)</th>
+      <th class="td-right hide-mobile">Стойност (С)</th>
+      <th class="hide-mobile">Срок</th>
+    </tr></thead>
+    <tbody id="invBody"></tbody>
+    <tfoot id="invFoot"></tfoot>
+  </table>
+</div>
+
+<script>
+let debT;
+function debInv(){clearTimeout(debT);debT=setTimeout(loadInv,200)}
+
+let allProds=[];
+
+async function loadInv(){
+  const q=document.getElementById('invSearch').value.trim();
+  const url='/api/products?limit=500'+(q?'&q='+encodeURIComponent(q):'');
+  let prods=await (await fetch(url)).json();
+  if(document.getElementById('lowStock').checked)
+    prods=prods.filter(p=>p.quantity<=3);
+  if(document.getElementById('expiringOnly').checked){
+    const cutoff=new Date(); cutoff.setDate(cutoff.getDate()+7);
+    prods=prods.filter(p=>p.expiry_date&&new Date(p.expiry_date)<=cutoff);
+  }
+
+  let sv=0,cv=0;
+  prods.forEach(p=>{sv+=p.price*p.quantity;cv+=p.purchase_price*p.quantity});
+
+  document.getElementById('iSellVal').textContent=fmtDual(sv);
+  document.getElementById('iCostVal').textContent=fmtDual(cv);
+  document.getElementById('iProfit').textContent=fmtDual(sv-cv);
+
+  const body=document.getElementById('invBody');
+  body.innerHTML=prods.map(p=>{
+    const costV=p.purchase_price*p.quantity;
+    const sellV=p.price*p.quantity;
+    const qtyStr=p.unit_type==='kg'?p.quantity.toFixed(3):p.quantity;
+    const expiryBadge=p.expiry_date?`<span class="badge badge-amber">${p.expiry_date}</span>`:'';
+    const stockClass=p.quantity<=0?'text-red':p.quantity<=3?'text-amber':'text-green';
+    return `<tr>
+      <td class="text-muted text-xs">${p.id}</td>
+      <td><div class="font-semibold">${p.name}</div>${p.barcode?`<div class="text-xs text-muted font-mono">${p.barcode}</div>`:''}</td>
+      <td class="hide-mobile"><span class="badge badge-gray">${p.category_name||'—'}</span></td>
+      <td class="td-right ${stockClass}"><b>${qtyStr}</b> ${p.unit_type}</td>
+      <td class="td-right hide-mobile"><div class="price-dual"><div class="price-eur">${fmtEur(p.purchase_price)}</div><div class="price-bgn">${fmtBgn(p.purchase_price)}</div></div></td>
+      <td class="td-right"><div class="price-dual"><div class="price-eur">${fmtEur(p.price)}</div><div class="price-bgn">${fmtBgn(p.price)}</div></div></td>
+      <td class="td-right hide-mobile text-muted">${fmtEur(costV)}</td>
+      <td class="td-right hide-mobile">${fmtEur(sellV)}</td>
+      <td class="hide-mobile">${expiryBadge}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('invFoot').innerHTML=`
+    <tr style="background:var(--panel2)">
+      <td colspan="7" style="padding:10px 14px;font-weight:700;font-size:13px">Общо (${prods.length} продукта)</td>
+      <td class="td-right hide-mobile" style="padding:10px 14px;font-weight:700;color:var(--green2)">${fmtEur(sv)}</td>
+      <td></td>
+    </tr>`;
+}
+loadInv();
+</script>
+{% endblock %}

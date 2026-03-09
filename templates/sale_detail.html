@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Продажба #{{ sale.id }} — Freshorino{% endblock %}
+{% block page_title %}Продажба #{{ sale.id }}{% endblock %}
+{% block page_subtitle %}{{ sale.date }}{% endblock %}
+{% block content %}
+<div class="fade-up max-w-2xl mx-auto space-y-4">
+  <div class="glass-card p-5">
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
+      <div><div class="text-xs text-green-600">Оборот</div><div class="font-display text-xl text-green-200">€{{ "%.2f"|format(sale.total) }}</div><div class="text-xs text-green-700">{{ "%.2f"|format(sale.total * eur_rate) }} лв</div></div>
+      <div><div class="text-xs text-green-600">Отстъпка</div><div class="font-display text-xl text-green-200">{{ "%.1f"|format(sale.discount_percent) }}%</div><div class="text-xs text-green-700">€{{ "%.2f"|format(sale.discount_amount) }}</div></div>
+      {% if sale.amount_received %}<div><div class="text-xs text-green-600">Получено</div><div class="font-display text-xl text-green-200">€{{ "%.2f"|format(sale.amount_received) }}</div></div>{% endif %}
+      {% if sale.change_given is not none %}<div><div class="text-xs text-green-600">Ресто</div><div class="font-display text-xl text-green-200">€{{ "%.2f"|format(sale.change_given) }}</div></div>{% endif %}
+    </div>
+    <table class="w-full text-sm">
+      <thead><tr class="border-b border-green-900/40 text-xs text-green-600 uppercase">
+        <th class="py-2 text-left">Продукт</th><th class="py-2 text-right">Кол.</th><th class="py-2 text-right">Ед. цена</th><th class="py-2 text-right">Общо</th>
+      </tr></thead>
+      <tbody>
+        {% for it in items %}
+        <tr class="border-b border-green-900/20">
+          <td class="py-2 text-green-200">{{ it.product_name }}</td>
+          <td class="py-2 text-right text-green-400">{{ "%.3f"|format(it.quantity) if it.unit_type=='kg' else it.quantity|int }} {{ it.unit_type }}</td>
+          <td class="py-2 text-right font-mono text-green-300">€{{ "%.2f"|format(it.unit_price) }}</td>
+          <td class="py-2 text-right font-mono text-green-200">€{{ "%.2f"|format(it.line_total) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <div class="mt-4 flex gap-3">
+      <a href="/sales" class="btn-ghost">← Обратно</a>
+      <a href="/pos" class="btn-primary">Нова продажба</a>
+    </div>
+  </div>
+</div>
+{% endblock %}

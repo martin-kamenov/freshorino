@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Настройки{% endblock %}
+{% block page_title %}Настройки{% endblock %}
+
+{% block content %}
+<div class="grid g2" style="max-width:800px">
+  <div class="card">
+    <div style="font-family:var(--font-display);font-size:17px;font-weight:700;margin-bottom:16px">Потребители</div>
+    {% for u in users %}
+    <div class="flex justify-between items-center mb-3 pb-3" style="border-bottom:1px solid var(--border)">
+      <div>
+        <div class="font-semibold">{{ u.full_name or u.username }}</div>
+        <div class="text-xs text-muted">@{{ u.username }} · <span class="badge {% if u.role=='admin' %}badge-green{% else %}badge-blue{% endif %}">{{ u.role }}</span></div>
+      </div>
+      {% if u.id != session.get('uid') %}
+      <button class="btn btn-sm btn-danger" onclick="deleteUser({{ u.id }})">🗑</button>
+      {% endif %}
+    </div>
+    {% endfor %}
+    <div class="mt-3" style="font-family:var(--font-display);font-size:15px;font-weight:700;margin-bottom:12px">+ Нов потребител</div>
+    <div class="form-group"><label class="form-label">Потребителско Име</label><input class="form-input" id="nuName" placeholder="petko"></div>
+    <div class="form-group"><label class="form-label">Пълно Име</label><input class="form-input" id="nuFull" placeholder="Петко Петков"></div>
+    <div class="form-group"><label class="form-label">Парола</label><input class="form-input" id="nuPwd" type="password" placeholder="••••••••"></div>
+    <div class="form-group"><label class="form-label">Роля</label><select class="form-select" id="nuRole"><option value="staff">Staff</option><option value="admin">Admin</option></select></div>
+    <button class="btn btn-primary" onclick="createUser()">Създай</button>
+  </div>
+  <div class="card">
+    <div style="font-family:var(--font-display);font-size:17px;font-weight:700;margin-bottom:16px">Информация</div>
+    <div class="text-sm mb-2"><b>Базова валута:</b> EUR (€)</div>
+    <div class="text-sm mb-2"><b>BGN курс:</b> 1 EUR = 1.95583 лв</div>
+    <div class="text-sm mb-2"><b>База данни:</b> SQLite (store.db)</div>
+    <div class="separator"></div>
+    <div class="text-xs text-muted">Freshorino POS v1.0 · Built with Flask + SQLite</div>
+  </div>
+</div>
+<script>
+async function deleteUser(id){
+  if(!confirm('Изтрий потребителя?')) return;
+  const r=await api('DELETE','/api/users/'+id);
+  if(r.ok){toast('Изтрит.','success');location.reload()} else toast(r.error,'error');
+}
+async function createUser(){
+  const r=await api('POST','/api/users',{
+    username:document.getElementById('nuName').value,
+    full_name:document.getElementById('nuFull').value,
+    password:document.getElementById('nuPwd').value,
+    role:document.getElementById('nuRole').value,
+  });
+  if(r.ok){toast('Потребителят е създаден.','success');location.reload()} else toast(r.error,'error');
+}
+</script>
+{% endblock %}

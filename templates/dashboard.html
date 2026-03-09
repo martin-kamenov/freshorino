@@ -1,0 +1,354 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+
+{% block extra_head %}
+<style>
+/* ── Period picker ── */
+.period-bar{display:flex;gap:6px;flex-wrap:wrap;align-items:center;
+  background:var(--panel2);border:1px solid var(--border);border-radius:10px;
+  padding:10px 14px;margin-bottom:18px}
+.period-label{font-size:11px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.08em;color:var(--text3);white-space:nowrap;margin-right:4px}
+.period-btn{padding:5px 13px;border-radius:20px;font-size:12px;font-weight:600;
+  border:1px solid var(--border);background:transparent;color:var(--text2);
+  cursor:pointer;transition:all .15s;white-space:nowrap}
+.period-btn.active,.period-btn:hover{background:var(--green);color:#000;border-color:var(--green)}
+.date-inputs{display:flex;gap:6px;align-items:center;margin-left:auto}
+.date-inputs input{background:var(--panel);border:1px solid var(--border);border-radius:7px;
+  padding:5px 10px;color:var(--text);font-size:12px;width:120px}
+.date-inputs input:focus{outline:none;border-color:var(--green)}
+
+/* ── Rank bars ── */
+.rank-bar-wrap{display:flex;align-items:center;gap:10px;margin-bottom:9px}
+.rank-bar-label{font-size:13px;font-weight:500;width:130px;overflow:hidden;
+  white-space:nowrap;text-overflow:ellipsis;flex-shrink:0}
+.rank-bar-track{flex:1;background:var(--panel2);border-radius:4px;height:8px;overflow:hidden}
+.rank-bar-fill{height:100%;border-radius:4px;transition:width .6s ease}
+.rank-bar-val{font-size:12px;color:var(--text3);width:65px;text-align:right;flex-shrink:0}
+
+/* ── Hourly heatmap ── */
+.hour-grid{display:grid;grid-template-columns:repeat(24,1fr);gap:3px;margin-top:10px}
+.hour-cell{border-radius:4px;aspect-ratio:1;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;cursor:pointer;transition:transform .1s;
+  position:relative}
+.hour-cell:hover{transform:scale(1.15);z-index:10}
+.hour-cell .hc-label{font-size:9px;color:var(--text3);margin-top:2px}
+.hour-cell .hc-val{font-size:10px;font-weight:700}
+.hour-tooltip{position:absolute;bottom:115%;left:50%;transform:translateX(-50%);
+  background:var(--panel2);border:1px solid var(--border);border-radius:6px;
+  padding:5px 9px;white-space:nowrap;font-size:11px;pointer-events:none;
+  display:none;z-index:20;box-shadow:var(--shadow)}
+.hour-cell:hover .hour-tooltip{display:block}
+@media(max-width:700px){
+  .hour-grid{grid-template-columns:repeat(12,1fr)}
+  .hc-label{display:none}
+}
+</style>
+{% endblock %}
+
+{% block content %}
+{% if user.role != 'admin' %}
+<div class="card" style="text-align:center;padding:40px">
+  <div style="font-size:48px;margin-bottom:12px">🔒</div>
+  <div style="font-family:var(--font-display);font-size:20px;font-weight:700;margin-bottom:8px">Само за администратори</div>
+  <div class="text-muted">Dashboard е достъпен само за Admin потребители.</div>
+  <a href="/pos" class="btn btn-primary mt-4" style="display:inline-flex">→ Към POS</a>
+</div>
+{% else %}
+
+<!-- Period picker -->
+<div class="period-bar">
+  <span class="period-label">Период:</span>
+  <button class="period-btn" onclick="setPreset(0)">Днес</button>
+  <button class="period-btn" onclick="setPreset(7)">7 дни</button>
+  <button class="period-btn active" id="btn30" onclick="setPreset(30)">30 дни</button>
+  <button class="period-btn" onclick="setPreset(90)">90 дни</button>
+  <button class="period-btn" onclick="setPreset(365)">1 год.</button>
+  <button class="period-btn" onclick="setAllTime()">Всички</button>
+  <div class="date-inputs">
+    <input type="date" id="dFrom">
+    <span class="text-muted">—</span>
+    <input type="date" id="dTo">
+    <button class="btn btn-sm btn-primary" onclick="loadAll()">→</button>
+  </div>
+</div>
+
+<!-- KPI row -->
+<div class="grid g4 mb-4">
+  <div class="stat-card">
+    <div class="stat-card__label" id="kpi1Label">Оборот</div>
+    <div class="stat-card__value" id="kpiRev">—</div>
+    <div class="stat-card__sub" id="kpiRevBgn"></div>
+    <div class="stat-card__icon">💶</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-card__label" id="kpi2Label">Печалба</div>
+    <div class="stat-card__value" id="kpiProfit">—</div>
+    <div class="stat-card__sub" id="kpiProfitBgn"></div>
+    <div class="stat-card__icon">📈</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-card__label" id="kpi3Label">Транзакции</div>
+    <div class="stat-card__value" id="kpiTx">—</div>
+    <div class="stat-card__sub" id="kpiAvg"></div>
+    <div class="stat-card__icon">🛒</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-card__label">Продукти в склад</div>
+    <div class="stat-card__value" id="prodCount">—</div>
+    <div class="stat-card__sub" id="invSub"></div>
+    <div class="stat-card__icon">📦</div>
+  </div>
+</div>
+
+<!-- Charts row -->
+<div class="grid g2 mb-4" style="grid-template-columns:2fr 1fr">
+  <div class="card">
+    <div class="flex justify-between items-center mb-3">
+      <div style="font-family:var(--font-display);font-size:17px;font-weight:700">Приходи & Печалба</div>
+    </div>
+    <canvas id="revenueChart" height="180"></canvas>
+  </div>
+  <div class="card">
+    <div style="font-family:var(--font-display);font-size:17px;font-weight:700;margin-bottom:14px">Категории</div>
+    <canvas id="catChart" height="200"></canvas>
+  </div>
+</div>
+
+<!-- Best/Slow + Hourly -->
+<div class="grid g2 mb-4">
+  <div class="card">
+    <div style="font-family:var(--font-display);font-size:16px;font-weight:700;margin-bottom:14px">🏆 Топ 5 продавани</div>
+    <div id="bestList"></div>
+  </div>
+  <div>
+    <div class="card mb-3">
+      <div style="font-family:var(--font-display);font-size:16px;font-weight:700;margin-bottom:14px">🐌 Бавно движещи се</div>
+      <div id="slowList"></div>
+    </div>
+    <div class="card" id="expiringCard" style="display:none">
+      <div style="font-family:var(--font-display);font-size:16px;font-weight:700;color:var(--amber);margin-bottom:10px">⚠️ Изтичащ срок (3 дни)</div>
+      <div id="expiringList"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Hourly heatmap -->
+<div class="card mb-4">
+  <div class="flex justify-between items-center mb-2">
+    <div style="font-family:var(--font-display);font-size:17px;font-weight:700">🕐 Продажби по часове на деня</div>
+    <span class="text-xs text-muted" id="hourlySubtitle"></span>
+  </div>
+  <div style="font-size:11px;color:var(--text3);margin-bottom:8px">
+    Тъмно = малко продажби · Светло зелено = пик
+  </div>
+  <div class="hour-grid" id="hourGrid"></div>
+  <div class="mt-3">
+    <canvas id="hourChart" height="100"></canvas>
+  </div>
+</div>
+
+{% endif %}
+
+<script>
+{% if user.role == 'admin' %}
+let revChart=null, catChartObj=null, hourChartObj=null;
+let currentFrom='', currentTo='';
+
+function setPreset(days){
+  document.querySelectorAll('.period-btn').forEach(b=>b.classList.remove('active'));
+  event.target.classList.add('active');
+  const to=new Date(); const from=new Date();
+  if(days===0){
+    // Today only
+    currentFrom=currentTo=to.toISOString().slice(0,10);
+  } else {
+    from.setDate(from.getDate()-days);
+    currentFrom=from.toISOString().slice(0,10);
+    currentTo=to.toISOString().slice(0,10);
+  }
+  document.getElementById('dFrom').value=currentFrom;
+  document.getElementById('dTo').value=currentTo;
+  updateKpiLabels(days);
+  loadAll();
+}
+
+function setAllTime(){
+  document.querySelectorAll('.period-btn').forEach(b=>b.classList.remove('active'));
+  currentFrom='2000-01-01';
+  currentTo=new Date().toISOString().slice(0,10);
+  document.getElementById('dFrom').value=currentFrom;
+  document.getElementById('dTo').value=currentTo;
+  document.getElementById('kpi1Label').textContent='Общо оборот';
+  loadAll();
+}
+
+function updateKpiLabels(days){
+  const labels={0:'Днес — Оборот',7:'7 дни — Оборот',30:'30 дни — Оборот',
+                90:'90 дни — Оборот',365:'1 год. — Оборот'};
+  document.getElementById('kpi1Label').textContent=labels[days]||'Оборот';
+  document.getElementById('kpi2Label').textContent=labels[days]?.replace('Оборот','Печалба')||'Печалба';
+  document.getElementById('kpi3Label').textContent='Транзакции';
+}
+
+document.getElementById('dFrom').addEventListener('change',()=>{
+  currentFrom=document.getElementById('dFrom').value;
+  currentTo=document.getElementById('dTo').value;
+});
+document.getElementById('dTo').addEventListener('change',()=>{
+  currentTo=document.getElementById('dTo').value;
+});
+
+async function loadAll(){
+  currentFrom=document.getElementById('dFrom').value||currentFrom;
+  currentTo=document.getElementById('dTo').value||currentTo;
+  await Promise.all([loadStats(), loadCharts(), loadHourly(), loadExpiring()]);
+}
+
+async function loadStats(){
+  const r=await fetch(`/api/dashboard/stats?from=${currentFrom}&to=${currentTo}`);
+  const d=await r.json();
+  // Use today for "Dnес" KPIs if period covers today, else use full period
+  const today=new Date().toISOString().slice(0,10);
+  const isToday=(currentFrom===today && currentTo===today);
+  // Fetch specific period stats via charts endpoint to get exact range
+  const cr=await fetch(`/api/dashboard/charts?from=${currentFrom}&to=${currentTo}`);
+  const cd=await cr.json();
+  const totRev=cd.daily.reduce((s,r)=>s+r.revenue,0);
+  const totProfit=cd.daily.reduce((s,r)=>s+r.profit,0);
+  const totTx=cd.daily.reduce((s,r)=>s+(r.tx_count||0),0);
+
+  document.getElementById('kpiRev').textContent=fmtEur(totRev);
+  document.getElementById('kpiRevBgn').textContent='('+fmtBgn(totRev)+')';
+  document.getElementById('kpiProfit').textContent=fmtEur(totProfit);
+  document.getElementById('kpiProfitBgn').textContent='('+fmtBgn(totProfit)+')';
+  document.getElementById('kpiTx').textContent=totTx;
+  document.getElementById('kpiAvg').textContent=totTx>0?'Средно: '+fmtEur(totRev/totTx)+'/продажба':'';
+
+  document.getElementById('prodCount').textContent=d.inventory.product_count;
+  const sub=[];
+  if(d.inventory.out_of_stock) sub.push(`<span class="text-red">${d.inventory.out_of_stock} изчерпани</span>`);
+  if(d.inventory.expiring_soon) sub.push(`<span class="text-amber">${d.inventory.expiring_soon} изтичат</span>`);
+  document.getElementById('invSub').innerHTML=sub.join(' · ')||'✅ Всичко е наред';
+}
+
+async function loadCharts(){
+  const d=await (await fetch(`/api/dashboard/charts?from=${currentFrom}&to=${currentTo}`)).json();
+  const labels=d.daily.map(r=>r.day.slice(5));
+  const revData=d.daily.map(r=>r.revenue);
+  const profData=d.daily.map(r=>r.profit);
+
+  if(revChart) revChart.destroy();
+  revChart=new Chart(document.getElementById('revenueChart'),{
+    type:'line',
+    data:{labels,datasets:[
+      {label:'Оборот €',data:revData,borderColor:'#7CB518',backgroundColor:'rgba(124,181,24,.1)',
+       borderWidth:2,fill:true,tension:.4,pointRadius:2},
+      {label:'Печалба €',data:profData,borderColor:'#F5C842',backgroundColor:'rgba(245,200,66,.07)',
+       borderWidth:2,fill:true,tension:.4,pointRadius:2}
+    ]},
+    options:{responsive:true,plugins:{legend:{labels:{color:'#9DB88A',font:{family:"'DM Sans'"}}}},
+      scales:{x:{ticks:{color:'#637A55',maxTicksLimit:10},grid:{color:'rgba(99,122,85,.15)'}},
+              y:{ticks:{color:'#637A55',callback:v=>'€'+v.toFixed(0)},grid:{color:'rgba(99,122,85,.15)'}}}}
+  });
+
+  if(catChartObj) catChartObj.destroy();
+  if(d.category_revenue.length){
+    catChartObj=new Chart(document.getElementById('catChart'),{
+      type:'doughnut',
+      data:{labels:d.category_revenue.map(r=>r.category),
+            datasets:[{data:d.category_revenue.map(r=>r.revenue),
+                       backgroundColor:d.category_revenue.map(r=>r.color+'CC'),
+                       borderColor:d.category_revenue.map(r=>r.color),borderWidth:1}]},
+      options:{responsive:true,cutout:'60%',plugins:{legend:{position:'bottom',
+        labels:{color:'#9DB88A',font:{family:"'DM Sans'"},boxWidth:12,padding:8}}}}
+    });
+  }
+
+  const maxQty=d.best_sellers.reduce((m,r)=>Math.max(m,r.qty),0)||1;
+  document.getElementById('bestList').innerHTML=d.best_sellers.map(r=>`
+    <div class="rank-bar-wrap">
+      <div class="rank-bar-label" title="${r.name}">${r.name}</div>
+      <div class="rank-bar-track"><div class="rank-bar-fill" style="width:${r.qty/maxQty*100}%;background:var(--green)"></div></div>
+      <div class="rank-bar-val">${r.qty} ед.</div>
+    </div>`).join('')||'<div class="text-muted text-sm">Няма данни.</div>';
+
+  document.getElementById('slowList').innerHTML=d.slow_movers.map(r=>`
+    <div class="rank-bar-wrap">
+      <div class="rank-bar-label" title="${r.name}">${r.name}</div>
+      <div class="rank-bar-track"><div class="rank-bar-fill" style="width:${Math.min((r.sold_30d||0.1)/5*100,100)}%;background:var(--amber)"></div></div>
+      <div class="rank-bar-val">${r.stock} налично</div>
+    </div>`).join('')||'<div class="text-muted text-sm">Няма данни.</div>';
+}
+
+async function loadHourly(){
+  const d=await (await fetch(`/api/dashboard/hourly?from=${currentFrom}&to=${currentTo}`)).json();
+  const maxTx=d.reduce((m,h)=>Math.max(m,h.tx_count),0)||1;
+  const maxRev=d.reduce((m,h)=>Math.max(m,h.revenue),0)||1;
+
+  document.getElementById('hourlySubtitle').textContent=
+    `${currentFrom} — ${currentTo}`;
+
+  // Heatmap cells
+  document.getElementById('hourGrid').innerHTML=d.map(h=>{
+    const intensity=h.tx_count/maxTx;
+    const bg=intensity===0?'rgba(124,181,24,0.04)':
+      `rgba(124,181,24,${0.08+intensity*0.82})`;
+    const textColor=intensity>0.5?'#000':'var(--text2)';
+    return `<div class="hour-cell" style="background:${bg};color:${textColor}">
+      <div class="hc-val">${h.tx_count||''}</div>
+      <div class="hc-label">${h.label.slice(0,2)}</div>
+      <div class="hour-tooltip">${h.label}<br>${h.tx_count} продажби<br>€${h.revenue.toFixed(2)}</div>
+    </div>`;
+  }).join('');
+
+  // Bar chart
+  if(hourChartObj) hourChartObj.destroy();
+  hourChartObj=new Chart(document.getElementById('hourChart'),{
+    type:'bar',
+    data:{
+      labels:d.map(h=>h.label.slice(0,5)),
+      datasets:[
+        {label:'Продажби',data:d.map(h=>h.tx_count),
+         backgroundColor:'rgba(124,181,24,.6)',borderColor:'#7CB518',borderWidth:1,yAxisID:'y'},
+        {label:'Оборот €',data:d.map(h=>h.revenue),type:'line',
+         borderColor:'#F5C842',borderWidth:2,pointRadius:2,tension:.4,
+         backgroundColor:'transparent',yAxisID:'y2'}
+      ]
+    },
+    options:{responsive:true,interaction:{mode:'index'},
+      plugins:{legend:{labels:{color:'#9DB88A',font:{family:"'DM Sans'"}}}},
+      scales:{
+        x:{ticks:{color:'#637A55'},grid:{color:'rgba(99,122,85,.12)'}},
+        y:{position:'left',ticks:{color:'#637A55',stepSize:1},grid:{color:'rgba(99,122,85,.15)'},title:{display:true,text:'Брой',color:'#637A55'}},
+        y2:{position:'right',ticks:{color:'#F5C842',callback:v=>'€'+v.toFixed(0)},grid:{display:false},title:{display:true,text:'€',color:'#F5C842'}}
+      }}
+  });
+}
+
+async function loadExpiring(){
+  const d=await (await fetch('/api/expiring?days=3')).json();
+  if(!d.length){document.getElementById('expiringCard').style.display='none';return}
+  document.getElementById('expiringCard').style.display='';
+  document.getElementById('expiringList').innerHTML=d.map(p=>`
+    <div class="flex justify-between items-center mb-2">
+      <div><div class="font-semibold text-sm">${p.name}</div>
+           <div class="text-xs text-muted">${p.quantity} ${p.unit_type}</div></div>
+      <div class="badge badge-amber">${p.expiry_date}</div>
+    </div>`).join('');
+}
+
+// Init — default 30 days
+(function(){
+  const to=new Date(); const from=new Date();
+  from.setDate(from.getDate()-30);
+  currentFrom=from.toISOString().slice(0,10);
+  currentTo=to.toISOString().slice(0,10);
+  document.getElementById('dFrom').value=currentFrom;
+  document.getElementById('dTo').value=currentTo;
+  loadAll();
+})();
+{% endif %}
+</script>
+{% endblock %}

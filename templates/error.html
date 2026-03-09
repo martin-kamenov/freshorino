@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Грешка {{ code }}{% endblock %}
+{% block page_title %}Грешка {{ code }}{% endblock %}
+{% block content %}
+<div class="flex items-center justify-center py-20">
+  <div class="text-center">
+    <div class="font-display text-8xl text-green-800 mb-4">{{ code }}</div>
+    <p class="text-green-400 text-lg mb-6">{{ msg }}</p>
+    <a href="/" class="btn-primary">← Начало</a>
+  </div>
+</div>
+{% endblock %}
